@@ -1,0 +1,28 @@
+# Pico-Telegram-Bot Git Ignore
+
+# Sensitive Data (CRITICAL)
+secrets.py
+stats.json
+context.json
+journey.json
+revenue_trials.json
+*.tmp
+
+# Python / MicroPython
+__pycache__/
+*.py[cod]
+*$py.class
+.venv
+env/
+venv/
+ENV/
+
+# IDE / Editor Settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Specific
+.DS_Store
+Thumbs.db

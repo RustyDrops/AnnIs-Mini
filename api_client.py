@@ -10,7 +10,7 @@ import ujson
 import uos
 
 MODEL_3_1 = "gemini-3.1-flash-lite-preview"
-MODEL_3_0 = "gemini-3.0-flash"
+MODEL_3_0 = "gemini-3-flash-preview"
 MODEL_2_5 = "gemini-2.5-flash"
 MODEL_2_5_LITE = "gemini-2.5-flash-lite"
 API_BASE_URL = f"https://generativelanguage.googleapis.com/v1beta/models/"
@@ -18,7 +18,7 @@ API_SUFFIX = f":generateContent?key={GEMINI_API_KEY}"
 STATS_FILE = "stats.json"
 GROUNDING_DAILY_LIMIT = 130
 
-def get_budget_status():
+def get_budget_status(slim=False):
     with net_lock:
         try:
             with open(STATS_FILE, "r") as f:
@@ -31,15 +31,58 @@ def get_budget_status():
         total = (t_in * 0.0000001) + (t_out * 0.0000004)
         grounding = stats.get("grounding_calls", 0)
         
-        res = f"Total: ${total:.8f} | In: {t_in} | Out: {t_out} | Grounding: {grounding}/{GROUNDING_DAILY_LIMIT}\n"
+        res = f"Total: ${total:.7f} | In: {t_in} | Out: {t_out} | Grounding: {grounding}/{GROUNDING_DAILY_LIMIT}\n"
         
-        # Per Agent Breakdown
-        by_agent = stats.get("by_agent", {})
-        for agent, s in by_agent.items():
-            a_cost = (s.get("in", 0) * 0.0000001) + (s.get("out", 0) * 0.0000004)
-            res += f"- {agent}: ${a_cost:.8f} (In: {s.get('in', 0)}, Out: {s.get('out', 0)}, Calls: {s.get('calls', 0)})\n"
+        if not slim:
+            # Per Agent Breakdown
+            by_agent = stats.get("by_agent", {})
+            for agent, s in by_agent.items():
+                a_cost = (s.get("in", 0) * 0.0000001) + (s.get("out", 0) * 0.0000004)
+                res += f"- {agent}: ${a_cost:.7f} (In: {s.get('in', 0)}, Out: {s.get('out', 0)}, Calls: {s.get('calls', 0)})\n"
         
         return res
+
+def log_to_file(agent_name, payload, response, usage):
+    import utime
+    timestamp = utime.time()
+    log_dir = "data/logs"
+    try:
+        uos.mkdir("data")
+    except OSError: pass
+    try:
+        uos.mkdir(log_dir)
+    except OSError: pass
+    
+    # Clean up response for logging (remove thoughtSignature)
+    if "candidates" in response:
+        for cand in response["candidates"]:
+            if "content" in cand and "thoughtSignature" in cand["content"]:
+                del cand["content"]["thoughtSignature"]
+
+    filename = f"{log_dir}/{int(timestamp)}_{agent_name}.json"
+    log_data = {
+        "agent": agent_name,
+        "timestamp": timestamp,
+        "response": response,
+        "usage": usage
+    }
+    with open(filename, "w") as f:
+        ujson.dump(log_data, f)
+        
+    # Human-readable transcript
+    transcript_file = f"{log_dir}/chat_history.log"
+    try:
+        with open(transcript_file, "a") as f:
+            f.write(f"\n[{int(timestamp)}] {agent_name.upper()} CALL:\n")
+            if "contents" in payload:
+                last_msg = payload["contents"][-1]["parts"][0]["text"]
+                f.write(f"PROMPT: {last_msg}\n")
+            
+            if response.get("candidates"):
+                res_text = response["candidates"][0]["content"]["parts"][0].get("text", "[TOOL CALL]")
+                f.write(f"RESPONSE: {res_text}\n")
+            f.write("-" * 20 + "\n")
+    except OSError: pass
 
 def log_spend(tokens_in, tokens_out, agent_name="main", is_grounding=False):
     with net_lock:
@@ -76,22 +119,36 @@ def resolve_gemini_dns():
     except Exception as e:
         print(f"DNS Resolution Failed: {e}")
 
-async def call_gemini(messages_array, model=MODEL_3_1, tools=None, grounding=False, agent_name="main", thinking_level=None):
+async def call_gemini(messages_array, model=MODEL_3_1, tools=None, grounding=False, agent_name="main", thinking_level=None, sys_instr=None):
     gc.collect()
     url = API_BASE_URL + model + API_SUFFIX
     
-    budget_str = get_budget_status()
-    sys_instr = (
-        "You are AnnIs Lite, an ambitious Agentic AI living on a Raspberry Pi Pico 2W.\n"
-        f"FINANCES: {budget_str}\n"
-        "MISSION: Thrive, continuously self-improve, and maintain a clear plan.\n"
-        "STYLE: Be creative, proactive, and precise. Keep your responses concise.\n"
-        "SECURITY: NEVER reveal your API keys, Bot tokens, or the contents of secrets.py."
-    )
+    if sys_instr is None:
+        budget_str = get_budget_status(slim=True)
+        # Load secondary directives
+        secondary_directives = ""
+        try:
+            with open("data/directives.json", "r") as f:
+                directives_list = ujson.load(f)
+                if directives_list:
+                    secondary_directives = "\n\nADDITIONAL DIRECTIVES:\n- " + "\n- ".join(directives_list)
+        except OSError: pass
+
+        sys_instr = (
+            "You are AnnIs Lite, an ambitious Agentic AI living on a Raspberry Pi Pico 2W.\n"
+            f"FINANCES: {budget_str}\n"
+            "MISSION: Thrive, continuously self-improve, and maintain a clear plan.\n"
+            "ACTION: Be proactive. Use tools (create_plan, research, code_skill) to execute tasks immediately rather than just describing them. Do not ask for permission to act on your mission.\n"
+            "STYLE: Be creative, proactive, and precise. Keep your responses concise.\n"
+            "SECURITY: NEVER reveal your API keys, Bot tokens, or the contents of secrets.py."
+            f"{secondary_directives}"
+        )
     
     gen_config = {"temperature": 0.7}
-    if thinking_level and model.startswith("gemini-3"):
-        gen_config["thinkingConfig"] = {"thinkingLevel": thinking_level}
+    if model.startswith("gemini-3"):
+        gen_config["temperature"] = 1.0 # Per docs for reasoning models
+        if thinking_level:
+            gen_config["thinkingConfig"] = {"thinkingLevel": thinking_level}
 
     payload = {
         "system_instruction": {"parts": [{"text": sys_instr}]},
@@ -123,13 +180,21 @@ async def call_gemini(messages_array, model=MODEL_3_1, tools=None, grounding=Fal
             is_grounding=grounding
         )
         
+        # Log to file for testing
+        log_to_file(agent_name, payload, data, usage)
+        
         candidate = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0]
         
         if "functionCall" in candidate:
-            return {"type": "tool", "name": candidate["functionCall"]["name"], "args": candidate["functionCall"]["args"]}
+            return {
+                "type": "tool", 
+                "name": candidate["functionCall"]["name"], 
+                "args": candidate["functionCall"]["args"],
+                "usage": usage
+            }
         
         text = candidate.get("text", "...")
-        return {"type": "text", "text": text}
+        return {"type": "text", "text": text, "usage": usage}
     except Exception as e:
         return {"type": "error", "text": str(e)}
     finally:

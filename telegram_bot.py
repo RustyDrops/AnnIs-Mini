@@ -30,6 +30,9 @@ def send_telegram_msg(text):
         machine.WDT(timeout=8388).feed()
         with net_lock:
             res = urequests.post(TX_URL, json=payload, headers={"Content-Type": "application/json"}, timeout=10)
+            # Use hasattr check for shim compatibility
+            status = res.r.status_code if hasattr(res, 'r') else getattr(res, 'status_code', '??')
+            print(f"[TELEGRAM] Sent: {status}")
         machine.WDT(timeout=8388).feed()
         
     except Exception as e:

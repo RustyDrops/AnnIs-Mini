@@ -10,6 +10,7 @@ revenue_trials.json
 
 # Python / MicroPython
 __pycache__/
+data
 *.py[cod]
 *$py.class
 .venv

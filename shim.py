@@ -62,6 +62,9 @@ except ImportError: sys.modules['uasyncio'] = asyncio
 try: import ujson
 except ImportError: sys.modules['ujson'] = json
 
+try: import utime
+except ImportError: sys.modules['utime'] = time
+
 try: import uos
 except ImportError:
     import os
@@ -103,5 +106,5 @@ except ImportError:
     sys.modules['micropython'] = MockMicroPython()
 
 print("--- PC COMPATIBILITY LAYER ACTIVE ---")
-TERMINAL_MODE = True
-print("--- TERMINAL INPUT MODE ENABLED ---")
+TERMINAL_MODE = False
+print("--- TELEGRAM POLLER MODE ENABLED ---")

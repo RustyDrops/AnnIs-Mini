@@ -19,7 +19,8 @@ async def summarize_context(messages_history):
         messages_array=messages,
         model=api_client.MODEL_3_0,
         agent_name="memory",
-        thinking_level="minimal"
+        thinking_level="minimal",
+        sys_instr=sys_instr
     )
     
-    return result.get('text', 'Summary failed.')
+    return result.get('text', 'Summary failed.'), result.get("usage", {})

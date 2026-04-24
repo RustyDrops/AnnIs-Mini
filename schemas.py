@@ -53,7 +53,7 @@ TOOLS_SCHEMA = [
             },
             {
                 "name": "create_plan",
-                "description": "Generates a multi-step execution plan for complex objectives. Use this to chain multiple subagent tasks efficiently.",
+                "description": "Generates a multi-step execution plan for complex objectives. Use this to initiate autonomous action. DO NOT ask for permission, just create the plan and execute it.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -117,7 +117,86 @@ TOOLS_SCHEMA = [
                         "thinking_level": {"type": "string", "enum": ["minimal", "low", "medium", "high"]}
                     }
                 }
+            },
+            {
+                "name": "search_memory",
+                "description": "Searches the persistent memory using exact tags.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "enum": ["research", "ideas", "knowledge"],
+                            "description": "The memory category to search."
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "A list of tags to search for in the index."
+                        }
+                    },
+                    "required": ["category", "tags"]
+                }
+            },
+            {
+                "name": "update_directives",
+                "description": "Appends a new persistent behavioral directive to the system (secondary settings).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "directive": {
+                            "type": "string",
+                            "description": "The rule or instruction to add (e.g., 'Give smaller responses')."
+                        }
+                    },
+                    "required": ["directive"]
+                }
+            },
+            {
+                "name": "save_skill",
+                "description": "Saves a MicroPython script to the 'data/skills/' directory for future use.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "Filename (e.g., 'weather_logger.py')."
+                        },
+                        "code": {
+                            "type": "string",
+                            "description": "The full MicroPython code content."
+                        }
+                    },
+                    "required": ["name", "code"]
+                }
             }
+        ]
+    }
+]
+
+TOOLS_LITE_SCHEMA = [
+    {
+        "function_declarations": [
+            f for f in TOOLS_SCHEMA[0]["function_declarations"]
+            if f["name"] in ["create_plan", "research", "code_skill", "audit_system", "design_ui", "write_headline", "save_skill", "update_directives"]
+        ]
+    }
+]
+
+TOOLS_CODING_SCHEMA = [
+    {
+        "function_declarations": [
+            f for f in TOOLS_SCHEMA[0]["function_declarations"]
+            if f["name"] in ["save_skill", "update_directives"]
+        ]
+    }
+]
+
+TOOLS_RESEARCH_SCHEMA = [
+    {
+        "function_declarations": [
+            f for f in TOOLS_SCHEMA[0]["function_declarations"]
+            if f["name"] in ["search_memory"]
         ]
     }
 ]

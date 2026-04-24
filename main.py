@@ -36,9 +36,8 @@ async def start_up():
     # 4. Notify Telegram
     mem_free = gc.mem_free() // 1024
     boot_msg = (
-        "Pico 2W Bot: ONLINE\n"
-        f"Speed: 150MHz | RAM: {mem_free}KB Free\n"
-        f"Commands:\n{poller.get_command_list()}"
+        "AnnIs Mini: ONLINE\n"
+        f"RAM: {mem_free}KB | ~help for commands"
     )
     telegram_bot.send_telegram_msg(boot_msg)
     
@@ -57,7 +56,11 @@ async def start_up():
             except Exception as e: print(f"Error: {e}")
     else:
         print("Master Loop Entry: TELEGRAM")
-        await poller.telegram_poller(wdt)
+        # Run both the poller and the autonomous background task
+        await asyncio.gather(
+            poller.telegram_poller(wdt),
+            poller.autonomous_task(wdt)
+        )
 
 if __name__ == "__main__":
     try:

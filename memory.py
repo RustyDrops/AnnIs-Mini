@@ -5,7 +5,7 @@ import gc
 from locks import state_lock
 
 MEMORY_FILE = "context.json"
-MAX_MESSAGES = 20  # 10 chats (User + Bot turns)
+MAX_MESSAGES = 14  # 7 chats (User + Bot turns)
 ram_buffer = [] 
 
 def init_memory():
@@ -37,3 +37,38 @@ def add_message(role, text):
 
 def get_full_context():
     return ram_buffer
+
+def clear_context():
+    global ram_buffer
+    with state_lock:
+        ram_buffer = []
+        try:
+            with open(MEMORY_FILE + ".tmp", 'w') as f:
+                ujson.dump(ram_buffer, f)
+            uos.rename(MEMORY_FILE + ".tmp", MEMORY_FILE)
+        except Exception as e:
+            print(f"Memory Save Error: {e}")
+
+def slice_context(turns: int):
+    global ram_buffer
+    with state_lock:
+        messages_to_keep = turns * 2
+        if len(ram_buffer) > messages_to_keep:
+            ram_buffer = ram_buffer[-messages_to_keep:]
+            try:
+                with open(MEMORY_FILE + ".tmp", 'w') as f:
+                    ujson.dump(ram_buffer, f)
+                uos.rename(MEMORY_FILE + ".tmp", MEMORY_FILE)
+            except Exception as e:
+                print(f"Memory Save Error: {e}")
+
+def replace_context(messages):
+    global ram_buffer
+    with state_lock:
+        ram_buffer = messages
+        try:
+            with open(MEMORY_FILE + ".tmp", 'w') as f:
+                ujson.dump(ram_buffer, f)
+            uos.rename(MEMORY_FILE + ".tmp", MEMORY_FILE)
+        except Exception as e:
+            print(f"Memory Save Error: {e}")
